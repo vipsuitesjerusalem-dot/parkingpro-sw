@@ -1,32 +1,24 @@
-
 import * as React from 'react';
 import { Layout } from './components/Layout';
-import { APARTMENTS, PARKING_SLOTS } from './constants';
-import { Booking, Suggestion, SplitSuggestion } from './types';
+import { Booking, Suggestion, SplitSuggestion, Apartment, ParkingSlot } from './types';
 import { getParkingSuggestions, getSplitParkingSuggestions } from './utils/parkingLogic';
 import { format, addDays } from 'date-fns';
 import { getParkingInsight } from './services/geminiService';
 import { 
-  Calendar, 
-  Car, 
-  Plus, 
-  AlertCircle, 
-  Sparkles,
-  Search,
-  Info,
-  ArrowRight,
-  Clock
+  Calendar, Car, Plus, AlertCircle, Sparkles, Search, ArrowRight, Clock
 } from 'lucide-react';
 
 const { useState, useEffect, useMemo, useCallback } = React;
 
-/**
- * Main Application Component
- * Fixed JSX errors by using * as React to correctly resolve JSX.IntrinsicElements namespace
- * for standard HTML elements in environments where default imports may not expose the global JSX type.
- */
+// Your SheetDB API URL
+const API_BASE = "https://sheetdb.io/api/v1/l5p4a56wupgs6";
+
 const App: React.FC = () => {
+  const [apartments, setApartments] = useState<Apartment[]>([]);
+  const [slots, setSlots] = useState<ParkingSlot[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
+  
   const [selectedApt, setSelectedApt] = useState<string>('');
   const [startDate, setStartDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [checkInTime, setCheckInTime] = useState<string>('16:00');
@@ -41,13 +33,54 @@ const App: React.FC = () => {
   const fullStartISO = useMemo(() => startDate && checkInTime ? `${startDate}T${checkInTime}` : '', [startDate, checkInTime]);
   const fullEndISO = useMemo(() => endDate && checkOutTime ? `${endDate}T${checkOutTime}` : '', [endDate, checkOutTime]);
 
-  // Update suggestions whenever selection or dates change
+  // Fetch initial data from Google Sheets via SheetDB
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [aptRes, bookRes] = await Promise.all([
+          fetch(`${API_BASE}?sheet=apartments`),
+          fetch(`${API_BASE}?sheet=bookings`)
+        ]);
+        
+        const rawApts = await aptRes.json();
+        const rawBooks = await bookRes.json();
+
+        const formattedApts: Apartment[] = rawApts.map((item: any) => ({
+          id: `apt-${item.apt}`,
+          name: `Apartment ${item.apt}`,
+          hasParking: item.slot !== "N/A",
+          parkingSlotId: item.slot !== "N/A" ? `ps-${item.apt}` : undefined
+        }));
+
+        const formattedSlots: ParkingSlot[] = rawApts
+          .filter((item: any) => item.slot !== "N/A")
+          .map((item: any) => ({
+            id: `ps-${item.apt}`,
+            name: `Slot ${item.slot}`,
+            floor: item.floor !== "N/A" ? item.floor : undefined,
+            ownerApartmentId: `apt-${item.apt}`
+          }));
+
+        setApartments(formattedApts);
+        setSlots(formattedSlots);
+        setBookings(Array.isArray(rawBooks) ? rawBooks : []);
+      } catch (error) {
+        console.error("Error loading data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  // Update suggestions based on selection
   useEffect(() => {
     if (selectedApt && fullStartISO && fullEndISO) {
-      const singleResults = getParkingSuggestions(selectedApt, fullStartISO, fullEndISO, APARTMENTS, PARKING_SLOTS, bookings);
+      const singleResults = getParkingSuggestions(selectedApt, fullStartISO, fullEndISO, apartments, slots, bookings);
       setSuggestions(singleResults);
       if (singleResults.length === 0) {
-        setSplitSuggestions(getSplitParkingSuggestions(selectedApt, fullStartISO, fullEndISO, APARTMENTS, PARKING_SLOTS, bookings));
+        setSplitSuggestions(getSplitParkingSuggestions(selectedApt, fullStartISO, fullEndISO, apartments, slots, bookings));
       } else {
         setSplitSuggestions([]);
       }
@@ -55,41 +88,59 @@ const App: React.FC = () => {
       setSuggestions([]);
       setSplitSuggestions([]);
     }
-  }, [selectedApt, fullStartISO, fullEndISO, bookings]);
+  }, [selectedApt, fullStartISO, fullEndISO, bookings, apartments, slots]);
 
-  // Fetch AI-powered insights on load and when bookings change
-  useEffect(() => {
-    const fetchInsight = async () => {
-      const insight = await getParkingInsight(PARKING_SLOTS.length, bookings.length, bookings);
-      if (insight) setAiInsight(insight);
-    };
-    fetchInsight();
-  }, [bookings.length]);
-
-  const handleAddBooking = useCallback((slotId: string, customDates?: { start: string, end: string }) => {
+  const handleAddBooking = useCallback(async (slotId: string, customDates?: { start: string, end: string }) => {
     if (!selectedApt || !fullStartISO || !fullEndISO) return;
+
     const newBooking: Booking = {
-      id: `book-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: `book-${Date.now()}`,
       apartmentId: selectedApt,
       parkingSlotId: slotId,
       startDate: customDates ? customDates.start : fullStartISO,
       endDate: customDates ? customDates.end : fullEndISO,
       guestName: guestName.trim() || 'Guest'
     };
-    setBookings(prev => [...prev, newBooking]);
-    if (!customDates || customDates.end === fullEndISO) {
-       setSelectedApt('');
-       setGuestName('');
-       setActiveTab('history');
+
+    try {
+      await fetch(`${API_BASE}?sheet=bookings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: [newBooking] })
+      });
+
+      setBookings(prev => [...prev, newBooking]);
+      if (!customDates || customDates.end === fullEndISO) {
+         setSelectedApt('');
+         setGuestName('');
+         setActiveTab('history');
+      }
+    } catch (error) {
+      alert("Error saving booking. Please try again.");
     }
   }, [selectedApt, fullStartISO, fullEndISO, guestName]);
 
-  // Removes a booking from the local log
-  const removeBooking = (id: string) => {
-    setBookings(bookings.filter(b => b.id !== id));
+  const removeBooking = async (id: string) => {
+    try {
+      await fetch(`${API_BASE}/id/${id}?sheet=bookings`, {
+        method: 'DELETE'
+      });
+      setBookings(bookings.filter(b => b.id !== id));
+    } catch (error) {
+      alert("Error deleting booking.");
+    }
   };
 
   const isFormValid = useMemo(() => !!selectedApt && !!startDate && !!checkInTime && !!endDate && !!checkOutTime, [selectedApt, startDate, checkInTime, endDate, checkOutTime]);
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen font-bold text-slate-600 bg-slate-50">
+      <div className="flex flex-col items-center gap-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <p>Syncing with Google Sheets...</p>
+      </div>
+    </div>
+  );
 
   return (
     <Layout>
@@ -97,15 +148,15 @@ const App: React.FC = () => {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-4">
           <div className="bg-indigo-50 p-3 rounded-xl text-indigo-600"><Car size={24} /></div>
           <div>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-tight mb-1">Free Spots</p>
-            <h3 className="text-3xl font-bold text-slate-800">{PARKING_SLOTS.length - bookings.length} <span className="text-slate-300 text-xl font-normal">/ {PARKING_SLOTS.length}</span></h3>
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-tight mb-1">Total Free Spots</p>
+            <h3 className="text-3xl font-bold text-slate-800">{slots.length - bookings.length} <span className="text-slate-300 text-xl font-normal">/ {slots.length}</span></h3>
           </div>
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-4 md:col-span-2">
           <div className="bg-amber-50 p-3 rounded-xl text-amber-600"><Sparkles size={24} /></div>
           <div className="flex-grow">
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-tight mb-1">ParkingPro sw Insight</p>
-            <p className="text-slate-600 leading-relaxed italic text-sm">{aiInsight || "Operations running smoothly today."}</p>
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-tight mb-1">Live Management</p>
+            <p className="text-slate-600 leading-relaxed italic text-sm">Synchronized with Google Sheets database.</p>
           </div>
         </div>
       </div>
@@ -125,7 +176,7 @@ const App: React.FC = () => {
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Apartment *</label>
                   <select value={selectedApt} onChange={(e) => setSelectedApt(e.target.value)} className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 font-medium text-slate-700 outline-none">
                     <option value="">Select Apartment</option>
-                    {APARTMENTS.map(apt => <option key={apt.id} value={apt.id}>{apt.name} {apt.hasParking ? '✓' : ''}</option>)}
+                    {apartments.map(apt => <option key={apt.id} value={apt.id}>{apt.name} {apt.hasParking ? '✓' : ''}</option>)}
                   </select>
                 </div>
                 <div>
@@ -163,7 +214,6 @@ const App: React.FC = () => {
               </div>
             </div>
           </div>
-
           <div className="lg:col-span-2">
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 min-h-[400px]">
               <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><Search size={18} className="text-indigo-600" /> Available Slots</h2>
@@ -173,27 +223,24 @@ const App: React.FC = () => {
                   <p className="text-sm font-medium">Complete form to see options</p>
                 </div>
               ) : (suggestions.length > 0 || splitSuggestions.length > 0) ? (
-                <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {suggestions.map(sug => (
-                    <div key={sug.slotId} className={`p-6 rounded-2xl border flex flex-col justify-between transition-all ${sug.isPriority ? 'border-indigo-600 bg-indigo-50/50 shadow-indigo-100 shadow-lg' : 'border-slate-100 bg-white shadow-sm hover:border-slate-300'}`}>
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h4 className="font-bold text-slate-800 flex items-center gap-2">{sug.slotName}{sug.isPriority && <span className="bg-indigo-600 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-widest">Owner</span>}</h4>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Floor {sug.floor || 'N/A'}</p>
-                        </div>
-                        <div className="bg-white p-2 rounded-lg border border-slate-100 text-indigo-400"><Car size={16} /></div>
+                    <div key={sug.slotId} className={`p-6 rounded-2xl border flex flex-col justify-between transition-all ${sug.isPriority ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' : 'border-slate-100 bg-white hover:border-slate-300'}`}>
+                      <div>
+                        <h4 className="font-bold text-slate-800 flex items-center gap-2">{sug.slotName} {sug.isPriority && <span className="bg-indigo-600 text-white text-[8px] px-1.5 py-0.5 rounded uppercase font-bold">Owner</span>}</h4>
+                        <p className="text-[10px] text-slate-400 uppercase font-bold">Floor {sug.floor || 'N/A'}</p>
                       </div>
-                      <button disabled={!isFormValid} onClick={() => handleAddBooking(sug.slotId)} className={`w-full py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${isFormValid ? 'bg-slate-800 text-white hover:bg-black' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Book Now</button>
+                      <button onClick={() => handleAddBooking(sug.slotId)} className="mt-6 w-full py-3 bg-slate-800 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-black transition-colors">Book Now</button>
                     </div>
                   ))}
                   {splitSuggestions.map((split, i) => (
-                    <div key={i} className="p-6 rounded-2xl border border-slate-100 bg-white flex flex-col gap-4 shadow-sm hover:shadow-md transition-all">
-                      <div className="flex justify-between items-center text-xs text-slate-400 font-bold uppercase tracking-tight">
-                        <div className="flex flex-col"><span className="text-slate-800">{split.firstSlot.slotName}</span><span className="font-normal italic text-[10px]">Until {split.splitDate}</span></div>
-                        <ArrowRight size={14} className="mx-4 text-slate-200" />
-                        <div className="flex flex-col text-right"><span className="text-slate-800">{split.secondSlot.slotName}</span><span className="font-normal italic text-[10px]">From {split.splitDate}</span></div>
+                    <div key={i} className="p-6 rounded-2xl border border-slate-100 bg-white flex flex-col gap-4 shadow-sm">
+                      <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase">
+                        <div className="flex flex-col"><span>{split.firstSlot.slotName}</span><span className="font-normal italic">Until {split.splitDate}</span></div>
+                        <ArrowRight size={14} className="text-slate-300" />
+                        <div className="flex flex-col text-right"><span>{split.secondSlot.slotName}</span><span className="font-normal italic">From {split.splitDate}</span></div>
                       </div>
-                      <button disabled={!isFormValid} onClick={() => { handleAddBooking(split.firstSlot.slotId, { start: fullStartISO, end: `${split.splitDate}T12:00` }); handleAddBooking(split.secondSlot.slotId, { start: `${split.splitDate}T12:00`, end: fullEndISO }); }} className={`w-full py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${isFormValid ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Book Split Stay</button>
+                      <button onClick={() => { handleAddBooking(split.firstSlot.slotId, { start: fullStartISO, end: `${split.splitDate}T12:00` }); handleAddBooking(split.secondSlot.slotId, { start: `${split.splitDate}T12:00`, end: fullEndISO }); }} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-indigo-700 transition-colors">Book Split Stay</button>
                     </div>
                   ))}
                 </div>
@@ -218,12 +265,12 @@ const App: React.FC = () => {
               ) : (
                 [...bookings].reverse().map(b => (
                   <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-8 py-5 font-bold text-slate-700">{APARTMENTS.find(a=>a.id===b.apartmentId)?.name}</td>
+                    <td className="px-8 py-5 font-bold text-slate-700">{apartments.find(a=>a.id===b.apartmentId)?.name}</td>
                     <td className="px-8 py-5 text-slate-500">{b.guestName}</td>
-                    <td className="px-8 py-5"><span className="bg-indigo-50 text-indigo-700 text-[10px] px-3 py-1 rounded-lg font-bold border border-indigo-100 shadow-sm">{PARKING_SLOTS.find(s=>s.id===b.parkingSlotId)?.name}</span></td>
+                    <td className="px-8 py-5"><span className="bg-indigo-50 text-indigo-700 text-[10px] px-3 py-1 rounded-lg font-bold border border-indigo-100">{slots.find(s=>s.id===b.parkingSlotId)?.name}</span></td>
                     <td className="px-8 py-5 text-slate-400 font-mono text-[10px]">{format(new Date(b.startDate), 'MMM dd, HH:mm')} - {format(new Date(b.endDate), 'MMM dd, HH:mm')}</td>
                     <td className="px-8 py-5 text-center">
-                      <button onClick={() => removeBooking(b.id)} className="px-4 py-2 text-rose-600 border border-rose-200 rounded-lg hover:bg-rose-50 transition-colors text-xs font-bold uppercase"> DELETE </button>
+                      <button onClick={() => removeBooking(b.id)} className="px-4 py-2 text-rose-600 border border-rose-200 rounded-lg hover:bg-rose-50 transition-colors text-[10px] font-bold uppercase"> DELETE </button>
                     </td>
                   </tr>
                 ))
