@@ -1,0 +1,5 @@
+{
+  "name": "ParkingPro sw - Vacation Rental Management",
+  "description": "A smart parking allocation system for vacation rentals. It prioritizes an apartment's own parking spot and intelligently suggests available alternatives, including combined split-period options.",
+  "requestFramePermissions": []
+}
