@@ -3,7 +3,6 @@ import { Layout } from './components/Layout';
 import { Booking, Suggestion, SplitSuggestion, Apartment, ParkingSlot } from './types';
 import { getParkingSuggestions, getSplitParkingSuggestions } from './utils/parkingLogic';
 import { format, addDays } from 'date-fns';
-import { getParkingInsight } from './services/geminiService';
 import { 
   Calendar, Car, Plus, AlertCircle, Sparkles, Search, ArrowRight, Clock
 } from 'lucide-react';
@@ -19,21 +18,24 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   
   const [selectedApt, setSelectedApt] = useState<string>('');
-  const [searchTerm, setSearchTerm] = useState<string>(''); // שדה לחיפוש דירה
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [startDate, setStartDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [checkInTime, setCheckInTime] = useState<string>('16:00');
-  const [endDate, setEndDate] = useState<string>(''); // הושאר ריק כדי לחייב בחירה
+  const [endDate, setEndDate] = useState<string>(''); 
   const [checkOutTime, setCheckOutTime] = useState<string>('11:00');
   const [guestName, setGuestName] = useState<string>('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [splitSuggestions, setSplitSuggestions] = useState<SplitSuggestion[]>([]);
   const [activeTab, setActiveTab] = useState<'book' | 'history'>('book');
 
-  // סינון דירות לפי חיפוש
+  // חיפוש גמיש - מוצא דירה גם לפי מספר בלבד
   const filteredApartments = useMemo(() => {
-    return apartments.filter(apt => 
-      apt.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    if (!searchTerm) return apartments;
+    return apartments.filter(apt => {
+      const aptNumber = apt.name.replace(/\D/g, ''); // מוציא רק את המספר מהשם
+      return apt.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+             aptNumber.includes(searchTerm);
+    });
   }, [apartments, searchTerm]);
 
   const fullStartISO = useMemo(() => startDate && checkInTime ? `${startDate}T${checkInTime}` : '', [startDate, checkInTime]);
@@ -117,7 +119,8 @@ const App: React.FC = () => {
       if (!customDates || customDates.end === fullEndISO) {
           setSelectedApt('');
           setGuestName('');
-          setEndDate(''); // איפוס תאריך סיום לאחר הזמנה
+          setSearchTerm('');
+          setEndDate('');
           setActiveTab('history');
       }
     } catch (error) {
@@ -178,32 +181,38 @@ const App: React.FC = () => {
               <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><Plus size={18} className="text-indigo-600" /> Reservation</h2>
               <div className="space-y-5">
                 
-                {/* שורת חיפוש חדשה */}
+                {/* שילוב חיפוש ובחירה בצורה נקייה */}
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Search Apartment</label>
-                  <div className="relative">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input 
-                      type="text" 
-                      value={searchTerm} 
-                      onChange={(e) => setSearchTerm(e.target.value)} 
-                      placeholder="Type apartment number..." 
-                      className="w-full pl-9 pr-4 py-3 border border-slate-100 rounded-xl bg-slate-50 font-medium text-slate-700 outline-none"
-                    />
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Apartment *</label>
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input 
+                        type="text" 
+                        value={searchTerm} 
+                        onChange={(e) => setSearchTerm(e.target.value)} 
+                        placeholder="Search by number..." 
+                        className="w-full pl-9 pr-4 py-2 border border-slate-100 rounded-t-xl bg-slate-50 text-sm font-medium text-slate-700 outline-none"
+                      />
+                    </div>
+                    <select 
+                      value={selectedApt} 
+                      onChange={(e) => setSelectedApt(e.target.value)} 
+                      className="w-full px-4 py-3 border border-slate-100 rounded-b-xl bg-white font-medium text-slate-700 outline-none focus:border-indigo-600 transition-colors"
+                    >
+                      <option value="">{searchTerm ? 'Select from results' : 'Select Apartment'}</option>
+                      {filteredApartments.map(apt => (
+                        <option key={apt.id} value={apt.id}>
+                          {apt.name} {apt.hasParking ? '✓' : ''}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Apartment *</label>
-                  <select value={selectedApt} onChange={(e) => setSelectedApt(e.target.value)} className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 font-medium text-slate-700 outline-none">
-                    <option value="">Select Apartment</option>
-                    {filteredApartments.map(apt => <option key={apt.id} value={apt.id}>{apt.name} {apt.hasParking ? '✓' : ''}</option>)}
-                  </select>
-                </div>
-
-                <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Guest Name</label>
-                  <input type="text" value={guestName} onChange={(e) => setGuestName(e.target.value)} className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 outline-none" placeholder="e.g. John Doe" />
+                  <input type="text" value={guestName} onChange={(e) => setGuestName(e.target.value)} className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 outline-none text-sm" placeholder="e.g. John Doe" />
                 </div>
                 <div className="space-y-4">
                   <div>
