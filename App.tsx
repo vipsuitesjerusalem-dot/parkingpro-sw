@@ -32,7 +32,7 @@ const App: React.FC = () => {
   const filteredApartments = useMemo(() => {
     if (!searchTerm) return apartments;
     return apartments.filter(apt => {
-      const aptNumber = apt.name.replace(/\D/g, ''); // מוציא רק את המספר מהשם
+      const aptNumber = apt.name.replace(/\D/g, ''); 
       return apt.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
              aptNumber.includes(searchTerm);
     });
@@ -181,10 +181,9 @@ const App: React.FC = () => {
               <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><Plus size={18} className="text-indigo-600" /> Reservation</h2>
               <div className="space-y-5">
                 
-                {/* שילוב חיפוש ובחירה בצורה נקייה */}
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Apartment *</label>
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     <div className="relative">
                       <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                       <input 
@@ -192,7 +191,7 @@ const App: React.FC = () => {
                         value={searchTerm} 
                         onChange={(e) => setSearchTerm(e.target.value)} 
                         placeholder="Search by number..." 
-                        className="w-full pl-9 pr-4 py-2 border border-slate-100 rounded-t-xl bg-slate-50 text-sm font-medium text-slate-700 outline-none"
+                        className="w-full pl-9 pr-4 py-2 border border-slate-100 rounded-t-xl bg-slate-50 text-sm font-medium text-slate-700 outline-none focus:border-indigo-300"
                       />
                     </div>
                     <select 
@@ -212,7 +211,13 @@ const App: React.FC = () => {
 
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Guest Name</label>
-                  <input type="text" value={guestName} onChange={(e) => setGuestName(e.target.value)} className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 outline-none text-sm" placeholder="e.g. John Doe" />
+                  <input 
+                    type="text" 
+                    value={guestName} 
+                    onChange={(e) => setGuestName(e.target.value)} 
+                    className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 outline-none text-sm" 
+                    placeholder="" 
+                  />
                 </div>
                 <div className="space-y-4">
                   <div>
