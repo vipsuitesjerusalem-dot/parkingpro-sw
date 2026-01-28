@@ -10,7 +10,6 @@ import {
 
 const { useState, useEffect, useMemo, useCallback } = React;
 
-// Your SheetDB API URL
 const API_BASE = "https://sheetdb.io/api/v1/l5p4a56wupgs6";
 
 const App: React.FC = () => {
@@ -20,20 +19,26 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   
   const [selectedApt, setSelectedApt] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState<string>(''); // שדה לחיפוש דירה
   const [startDate, setStartDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [checkInTime, setCheckInTime] = useState<string>('16:00');
-  const [endDate, setEndDate] = useState<string>(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
+  const [endDate, setEndDate] = useState<string>(''); // הושאר ריק כדי לחייב בחירה
   const [checkOutTime, setCheckOutTime] = useState<string>('11:00');
   const [guestName, setGuestName] = useState<string>('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [splitSuggestions, setSplitSuggestions] = useState<SplitSuggestion[]>([]);
   const [activeTab, setActiveTab] = useState<'book' | 'history'>('book');
-  const [aiInsight, setAiInsight] = useState<string>('');
+
+  // סינון דירות לפי חיפוש
+  const filteredApartments = useMemo(() => {
+    return apartments.filter(apt => 
+      apt.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [apartments, searchTerm]);
 
   const fullStartISO = useMemo(() => startDate && checkInTime ? `${startDate}T${checkInTime}` : '', [startDate, checkInTime]);
   const fullEndISO = useMemo(() => endDate && checkOutTime ? `${endDate}T${checkOutTime}` : '', [endDate, checkOutTime]);
 
-  // Fetch initial data from Google Sheets via SheetDB
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -74,9 +79,8 @@ const App: React.FC = () => {
     fetchData();
   }, []);
 
-  // Update suggestions based on selection
   useEffect(() => {
-    if (selectedApt && fullStartISO && fullEndISO) {
+    if (selectedApt && fullStartISO && fullEndISO && endDate !== '') {
       const singleResults = getParkingSuggestions(selectedApt, fullStartISO, fullEndISO, apartments, slots, bookings);
       setSuggestions(singleResults);
       if (singleResults.length === 0) {
@@ -88,7 +92,7 @@ const App: React.FC = () => {
       setSuggestions([]);
       setSplitSuggestions([]);
     }
-  }, [selectedApt, fullStartISO, fullEndISO, bookings, apartments, slots]);
+  }, [selectedApt, fullStartISO, fullEndISO, bookings, apartments, slots, endDate]);
 
   const handleAddBooking = useCallback(async (slotId: string, customDates?: { start: string, end: string }) => {
     if (!selectedApt || !fullStartISO || !fullEndISO) return;
@@ -111,9 +115,10 @@ const App: React.FC = () => {
 
       setBookings(prev => [...prev, newBooking]);
       if (!customDates || customDates.end === fullEndISO) {
-         setSelectedApt('');
-         setGuestName('');
-         setActiveTab('history');
+          setSelectedApt('');
+          setGuestName('');
+          setEndDate(''); // איפוס תאריך סיום לאחר הזמנה
+          setActiveTab('history');
       }
     } catch (error) {
       alert("Error saving booking. Please try again.");
@@ -172,13 +177,30 @@ const App: React.FC = () => {
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
               <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><Plus size={18} className="text-indigo-600" /> Reservation</h2>
               <div className="space-y-5">
+                
+                {/* שורת חיפוש חדשה */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Search Apartment</label>
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input 
+                      type="text" 
+                      value={searchTerm} 
+                      onChange={(e) => setSearchTerm(e.target.value)} 
+                      placeholder="Type apartment number..." 
+                      className="w-full pl-9 pr-4 py-3 border border-slate-100 rounded-xl bg-slate-50 font-medium text-slate-700 outline-none"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Apartment *</label>
                   <select value={selectedApt} onChange={(e) => setSelectedApt(e.target.value)} className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 font-medium text-slate-700 outline-none">
                     <option value="">Select Apartment</option>
-                    {apartments.map(apt => <option key={apt.id} value={apt.id}>{apt.name} {apt.hasParking ? '✓' : ''}</option>)}
+                    {filteredApartments.map(apt => <option key={apt.id} value={apt.id}>{apt.name} {apt.hasParking ? '✓' : ''}</option>)}
                   </select>
                 </div>
+
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Guest Name</label>
                   <input type="text" value={guestName} onChange={(e) => setGuestName(e.target.value)} className="w-full px-4 py-3 border border-slate-100 rounded-xl bg-slate-50 outline-none" placeholder="e.g. John Doe" />
