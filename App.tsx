@@ -28,33 +28,15 @@ const App: React.FC = () => {
   const [splitSuggestions, setSplitSuggestions] = useState<SplitSuggestion[]>([]);
   const [activeTab, setActiveTab] = useState<'book' | 'history'>('book');
 
-  // סינון ובחירה אוטומטית
+  // חיפוש גמיש - מוצא דירה גם לפי מספר בלבד
   const filteredApartments = useMemo(() => {
     if (!searchTerm) return apartments;
-    const filtered = apartments.filter(apt => {
+    return apartments.filter(apt => {
       const aptNumber = apt.name.replace(/\D/g, ''); 
       return apt.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
              aptNumber.includes(searchTerm);
     });
-    return filtered;
   }, [apartments, searchTerm]);
-
-  // פונקציית בחירה אוטומטית ברגע שיש התאמה מדוייקת של מספר
-  useEffect(() => {
-    if (searchTerm) {
-      const exactMatch = apartments.find(apt => {
-        const aptNumber = apt.name.replace(/\D/g, '');
-        return aptNumber === searchTerm;
-      });
-      if (exactMatch) {
-        setSelectedApt(exactMatch.id);
-      } else {
-        setSelectedApt('');
-      }
-    } else {
-      setSelectedApt('');
-    }
-  }, [searchTerm, apartments]);
 
   const fullStartISO = useMemo(() => startDate && checkInTime ? `${startDate}T${checkInTime}` : '', [startDate, checkInTime]);
   const fullEndISO = useMemo(() => endDate && checkOutTime ? `${endDate}T${checkOutTime}` : '', [endDate, checkOutTime]);
@@ -200,22 +182,31 @@ const App: React.FC = () => {
               <div className="space-y-5">
                 
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Apartment Number *</label>
-                  <div className="relative">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input 
-                      type="text" 
-                      value={searchTerm} 
-                      onChange={(e) => setSearchTerm(e.target.value)} 
-                      placeholder="e.g. 12" 
-                      className="w-full pl-9 pr-4 py-3 border border-slate-100 rounded-xl bg-slate-50 text-sm font-bold text-indigo-600 outline-none focus:border-indigo-500 shadow-inner"
-                    />
-                  </div>
-                  {selectedApt && (
-                    <div className="mt-2 text-[10px] font-bold text-emerald-600 flex items-center gap-1">
-                      <span>✓ Selected: {apartments.find(a => a.id === selectedApt)?.name}</span>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Apartment *</label>
+                  <div className="space-y-1">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input 
+                        type="text" 
+                        value={searchTerm} 
+                        onChange={(e) => setSearchTerm(e.target.value)} 
+                        placeholder="Search by number..." 
+                        className="w-full pl-9 pr-4 py-2 border border-slate-100 rounded-t-xl bg-slate-50 text-sm font-medium text-slate-700 outline-none focus:border-indigo-300"
+                      />
                     </div>
-                  )}
+                    <select 
+                      value={selectedApt} 
+                      onChange={(e) => setSelectedApt(e.target.value)} 
+                      className="w-full px-4 py-3 border border-slate-100 rounded-b-xl bg-white font-medium text-slate-700 outline-none focus:border-indigo-600 transition-colors"
+                    >
+                      <option value="">{searchTerm ? 'Select from results' : 'Select Apartment'}</option>
+                      {filteredApartments.map(apt => (
+                        <option key={apt.id} value={apt.id}>
+                          {apt.name} {apt.hasParking ? '✓' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div>
@@ -265,9 +256,7 @@ const App: React.FC = () => {
               {!isFormValid ? (
                 <div className="flex flex-col items-center justify-center h-48 text-slate-300">
                   <div className="bg-slate-50 p-6 rounded-full mb-4"><Calendar size={32} className="opacity-30" /></div>
-                  <p className="text-sm font-medium">
-                    {!selectedApt ? 'Type Apartment Number' : 'Select Check-out Date'}
-                  </p>
+                  <p className="text-sm font-medium">Complete form to see options</p>
                 </div>
               ) : (suggestions.length > 0 || splitSuggestions.length > 0) ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
