@@ -2,7 +2,7 @@ import * as React from 'react';
 import { Layout } from './components/Layout';
 import { Booking, Suggestion, SplitSuggestion, Apartment, ParkingSlot } from './types';
 import { getParkingSuggestions, getSplitParkingSuggestions } from './utils/parkingLogic';
-import { format, isWithinInterval, addDays, isSameDay } from 'date-fns';
+import { format, isWithinInterval, addDays, isSameDay, parseISO, isAfter } from 'date-fns';
 import { 
   Calendar, Car, Plus, AlertCircle, Sparkles, Search, ArrowRight, Clock, 
   TrendingUp, ArrowDownCircle, ArrowUpCircle
@@ -30,23 +30,28 @@ const App: React.FC = () => {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [splitSuggestions, setSplitSuggestions] = useState<SplitSuggestion[]>([]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [aptRes, bookRes] = await Promise.all([
-          fetch(`${API_BASE}?sheet=apartments`),
-          fetch(`${API_BASE}?sheet=bookings`)
-        ]);
-        const rawApts = await aptRes.json();
-        const rawBooks = await bookRes.json();
-        setApartments(rawApts.map((item: any) => ({ id: `apt-${item.apt}`, name: `Apartment ${item.apt}`, hasParking: item.slot !== "N/A", parkingSlotId: item.slot !== "N/A" ? `ps-${item.apt}` : undefined })));
-        setSlots(rawApts.filter((item: any) => item.slot !== "N/A").map((item: any) => ({ id: `ps-${item.apt}`, name: `Slot ${item.slot}`, floor: item.floor !== "N/A" ? item.floor : undefined, ownerApartmentId: `apt-${item.apt}` })));
-        setBookings(Array.isArray(rawBooks) ? rawBooks : []);
-      } catch (e) { console.error(e); } finally { setLoading(false); }
-    };
-    fetchData();
-  }, []);
+  const fetchData = async () => {
+    try {
+      const [aptRes, bookRes] = await Promise.all([
+        fetch(`${API_BASE}?sheet=apartments`),
+        fetch(`${API_BASE}?sheet=bookings`)
+      ]);
+      const rawApts = await aptRes.json();
+      const rawBooks = await bookRes.json();
+      setApartments(rawApts.map((item: any) => ({ id: `apt-${item.apt}`, name: `Apartment ${item.apt}`, hasParking: item.slot !== "N/A", parkingSlotId: item.slot !== "N/A" ? `ps-${item.apt}` : undefined })));
+      setSlots(rawApts.filter((item: any) => item.slot !== "N/A").map((item: any) => ({ id: `ps-${item.apt}`, name: `Slot ${item.slot}`, floor: item.floor !== "N/A" ? item.floor : undefined, ownerApartmentId: `apt-${item.apt}` })));
+      setBookings(Array.isArray(rawBooks) ? rawBooks : []);
+    } catch (e) { console.error(e); } finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const currentOccupiedCount = useMemo(() => {
+    const now = new Date();
+    return slots.filter(slot => 
+      bookings.some(b => b.parkingSlotId === slot.id && isWithinInterval(now, { start: parseISO(b.startDate), end: parseISO(b.endDate) }))
+    ).length;
+  }, [slots, bookings]);
 
   useEffect(() => {
     if (searchTerm) {
@@ -68,24 +73,37 @@ const App: React.FC = () => {
 
   const handleAddBooking = useCallback(async (slotId: string, d?: {start: string, end: string}) => {
     const newBooking = { id: `book-${Date.now()}`, apartmentId: selectedApt, parkingSlotId: slotId, startDate: d ? d.start : fullStartISO, endDate: d ? d.end : fullEndISO, guestName: guestName || 'Guest' };
-    await fetch(`${API_BASE}?sheet=bookings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: [newBooking] }) });
     setBookings(prev => [...prev, newBooking]);
+    await fetch(`${API_BASE}?sheet=bookings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: [newBooking] }) });
     if (!d || d.end === fullEndISO) { setSelectedApt(''); setSearchTerm(''); setEndDate(''); setActiveTab('history'); }
   }, [selectedApt, fullStartISO, fullEndISO, guestName]);
 
   const removeBooking = async (id: string) => {
+    setBookings(prev => prev.filter(b => b.id !== id));
     await fetch(`${API_BASE}/id/${id}?sheet=bookings`, { method: 'DELETE' });
-    setBookings(bookings.filter(b => b.id !== id));
+  };
+
+  // --- עזר לתצוגת תגיות בדשבורד ---
+  const renderBookingBadge = (b: Booking, type: 'in' | 'out') => {
+    const aptNum = apartments.find(a => a.id === b.apartmentId)?.name.replace(/\D/g, '');
+    const slotName = slots.find(s => s.id === b.parkingSlotId)?.name.replace('Slot ', '');
+    const colorClass = type === 'in' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100';
+    
+    return (
+      <div key={b.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${colorClass} text-[11px] font-bold shadow-sm`}>
+        <span className="opacity-60">Apt</span> <span>{aptNum}</span>
+        <ArrowRight size={10} className="opacity-40" />
+        <span className="opacity-60">Slot</span> <span>{slotName}</span>
+      </div>
+    );
   };
 
   // --- דף דשבורד (Dashboard) ---
   const renderDashboard = () => {
     const now = new Date();
-    const occupiedCount = bookings.filter(b => isWithinInterval(now, { start: new Date(b.startDate), end: new Date(b.endDate) })).length;
-    const occupancyPercent = (occupiedCount / slots.length) * 100;
-    
-    const checkIns = bookings.filter(b => isSameDay(new Date(b.startDate), now)).map(b => apartments.find(a => a.id === b.apartmentId)?.name.replace(/\D/g, ''));
-    const checkOuts = bookings.filter(b => isSameDay(new Date(b.endDate), now)).map(b => apartments.find(a => a.id === b.apartmentId)?.name.replace(/\D/g, ''));
+    const occupancyPercent = (currentOccupiedCount / slots.length) * 100;
+    const checkInsToday = bookings.filter(b => isSameDay(parseISO(b.startDate), now));
+    const checkOutsToday = bookings.filter(b => isSameDay(parseISO(b.endDate), now));
 
     return (
       <div className="space-y-8 animate-in fade-in duration-500">
@@ -97,27 +115,31 @@ const App: React.FC = () => {
                 <div className="absolute top-0 left-0 w-48 h-48 rounded-full border-[16px] border-indigo-500 transition-all duration-1000" 
                      style={{ clipPath: `inset(0 0 50% 0)`, transform: `rotate(${(occupancyPercent * 1.8) - 180}deg)` }}></div>
                 <div className="absolute bottom-0 w-full text-center">
-                   <span className="text-2xl font-black text-rose-500">{occupiedCount}</span>
+                   <span className="text-2xl font-black text-rose-500">{currentOccupiedCount}</span>
                    <span className="text-xl font-bold text-slate-300 mx-1">/</span>
                    <span className="text-2xl font-black text-emerald-500">{slots.length}</span>
                 </div>
              </div>
              <p className="text-[10px] font-bold text-slate-400 mt-2">{Math.round(occupancyPercent)}% Capacity</p>
           </div>
-
+          
           <div className="space-y-4">
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
-               <div className="bg-emerald-50 text-emerald-600 p-3 rounded-2xl"><ArrowDownCircle size={24}/></div>
-               <div>
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm min-h-[100px]">
+               <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-emerald-50 text-emerald-600 p-2 rounded-xl"><ArrowDownCircle size={20}/></div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Arrivals Today</p>
-                  <p className="text-lg font-bold text-slate-700">{checkIns.length > 0 ? checkIns.join(', ') : 'None'}</p>
+               </div>
+               <div className="flex flex-wrap gap-2">
+                  {checkInsToday.length > 0 ? checkInsToday.map(b => renderBookingBadge(b, 'in')) : <p className="text-sm text-slate-300 italic">No arrivals</p>}
                </div>
             </div>
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
-               <div className="bg-rose-50 text-rose-600 p-3 rounded-2xl"><ArrowUpCircle size={24}/></div>
-               <div>
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm min-h-[100px]">
+               <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-rose-50 text-rose-600 p-2 rounded-xl"><ArrowUpCircle size={20}/></div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Departures Today</p>
-                  <p className="text-lg font-bold text-slate-700">{checkOuts.length > 0 ? checkOuts.join(', ') : 'None'}</p>
+               </div>
+               <div className="flex flex-wrap gap-2">
+                  {checkOutsToday.length > 0 ? checkOutsToday.map(b => renderBookingBadge(b, 'out')) : <p className="text-sm text-slate-300 italic">No departures</p>}
                </div>
             </div>
           </div>
@@ -127,7 +149,7 @@ const App: React.FC = () => {
              <div className="flex items-end justify-between h-32 gap-3">
                 {[0,1,2,3,4,5,6].map(d => {
                   const date = addDays(now, d);
-                  const arrivals = bookings.filter(b => isSameDay(new Date(b.startDate), date)).length;
+                  const arrivals = bookings.filter(b => isSameDay(parseISO(b.startDate), date)).length;
                   return (
                     <div key={d} className="flex-grow flex flex-col items-center group">
                        <span className="text-[10px] font-bold text-indigo-600 mb-1">{arrivals}</span>
@@ -146,48 +168,77 @@ const App: React.FC = () => {
   };
 
   // --- דף מלאי (Inventory) ---
-  const renderInventory = () => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-in slide-in-from-bottom-4">
-      {slots.map(slot => {
-        const occ = bookings.find(b => b.parkingSlotId === slot.id && isWithinInterval(new Date(), { start: new Date(b.startDate), end: new Date(b.endDate) }));
-        return (
-          <div key={slot.id} className={`p-6 rounded-2xl border-2 flex flex-col justify-between h-40 ${occ ? 'border-rose-100 bg-rose-50/20' : 'border-emerald-100 bg-emerald-50/20'}`}>
-            <div>
-              <div className="flex justify-between items-start">
-                <h4 className="font-black text-slate-800 text-lg">{slot.name}</h4>
-                <span className={`text-[8px] font-black px-2 py-1 rounded uppercase ${occ ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}>
-                  {occ ? 'Occupied' : 'Available'}
-                </span>
-              </div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Floor {slot.floor || 'N/A'}</p>
-            </div>
-            {occ && <p className="text-xs font-bold text-rose-700 truncate">Guest: {occ.guestName}</p>}
-          </div>
-        );
-      })}
-    </div>
-  );
+  const renderInventory = () => {
+    const now = new Date();
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-in slide-in-from-bottom-4">
+        {slots.map(slot => {
+          const currentBook = bookings.find(b => b.parkingSlotId === slot.id && isWithinInterval(now, { start: parseISO(b.startDate), end: parseISO(b.endDate) }));
+          const upcomingToday = !currentBook && bookings.find(b => b.parkingSlotId === slot.id && isSameDay(parseISO(b.startDate), now) && isAfter(parseISO(b.startDate), now));
+          
+          let statusColor = "border-emerald-100 bg-emerald-50/20";
+          let badgeColor = "bg-emerald-500";
+          let statusText = "Available";
+          
+          if (currentBook) {
+            statusColor = "border-rose-200 bg-rose-50/30";
+            badgeColor = "bg-rose-500";
+            statusText = "Occupied";
+          } else if (upcomingToday) {
+            statusColor = "border-amber-200 bg-amber-50/30";
+            badgeColor = "bg-amber-500";
+            statusText = "Arriving Today";
+          }
 
-  if (loading) return <div className="flex items-center justify-center h-screen font-bold">Syncing...</div>;
+          const activeBooking = currentBook || upcomingToday;
+          const aptName = activeBooking ? apartments.find(a => a.id === activeBooking.apartmentId)?.name.replace(/\D/g, '') : '';
+
+          return (
+            <div key={slot.id} className={`p-6 rounded-2xl border-2 flex flex-col justify-between h-40 transition-all ${statusColor}`}>
+              <div>
+                <div className="flex justify-between items-start">
+                  <h4 className="font-black text-slate-800 text-lg">{slot.name}</h4>
+                  <span className={`text-[8px] font-black px-2 py-1 rounded uppercase text-white ${badgeColor}`}>
+                    {statusText}
+                  </span>
+                </div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Floor {slot.floor || 'N/A'}</p>
+              </div>
+              {activeBooking && (
+                <div className="flex flex-col">
+                  <p className="text-[11px] font-black text-slate-800">Apt {aptName}</p>
+                  <p className="text-[11px] font-medium text-slate-500 truncate">{activeBooking.guestName}</p>
+                  {upcomingToday && <span className="text-[9px] text-amber-600 font-bold uppercase mt-1">Arrival: {format(parseISO(upcomingToday.startDate), 'HH:mm')}</span>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  if (loading) return <div className="flex items-center justify-center h-screen font-bold">Syncing Database...</div>;
 
   return (
     <Layout activePage={activePage} onNavigate={(p) => setActivePage(p)}>
       {activePage === 'dashboard' ? renderDashboard() : activePage === 'inventory' ? renderInventory() : (
         <>
-          {/* הכותרות העליונות המקוריות שלך */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-4">
               <div className="bg-indigo-50 p-3 rounded-xl text-indigo-600"><Car size={24} /></div>
               <div>
                 <p className="text-slate-500 text-[10px] font-bold uppercase tracking-tight mb-1">Total Free Spots</p>
-                <h3 className="text-3xl font-bold text-slate-800">{slots.length - bookings.filter(b => isWithinInterval(new Date(), {start: new Date(b.startDate), end: new Date(b.endDate)})).length} <span className="text-slate-300 text-xl font-normal">/ {slots.length}</span></h3>
+                <h3 className="text-3xl font-bold text-slate-800">
+                  {slots.length - currentOccupiedCount} <span className="text-slate-300 text-xl font-normal">/ {slots.length}</span>
+                </h3>
               </div>
             </div>
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-4 md:col-span-2">
               <div className="bg-amber-50 p-3 rounded-xl text-amber-600"><Sparkles size={24} /></div>
               <div className="flex-grow">
                 <p className="text-slate-500 text-[10px] font-bold uppercase tracking-tight mb-1">Live Management</p>
-                <p className="text-slate-600 leading-relaxed italic text-sm">Synchronized with Google Sheets database.</p>
+                <p className="text-slate-600 leading-relaxed italic text-sm">Real-time sync enabled. Data is current.</p>
               </div>
             </div>
           </div>
@@ -208,9 +259,9 @@ const App: React.FC = () => {
                       <div className="space-y-1">
                         <div className="relative">
                           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                          <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search by number..." className="w-full pl-9 pr-4 py-2 border border-slate-100 rounded-t-xl bg-slate-50 text-sm font-medium text-slate-700 outline-none" />
+                          <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search..." className="w-full pl-9 pr-4 py-2 border border-slate-100 rounded-t-xl bg-slate-50 text-sm font-medium outline-none" />
                         </div>
-                        <select value={selectedApt} onChange={(e) => setSelectedApt(e.target.value)} className="w-full px-4 py-3 border border-slate-100 rounded-b-xl bg-white font-medium text-slate-700 outline-none">
+                        <select value={selectedApt} onChange={(e) => setSelectedApt(e.target.value)} className="w-full px-4 py-3 border border-slate-100 rounded-b-xl bg-white text-sm outline-none">
                           <option value="">Select Apartment</option>
                           {apartments.filter(a => !searchTerm || a.name.includes(searchTerm)).map(apt => (
                             <option key={apt.id} value={apt.id}>{apt.name} {apt.hasParking ? '✓' : ''}</option>
@@ -249,7 +300,7 @@ const App: React.FC = () => {
                       <div className="bg-slate-50 p-6 rounded-full mb-4"><Calendar size={32} className="opacity-30" /></div>
                       <p className="text-sm font-medium">Complete form to see options</p>
                     </div>
-                  ) : (suggestions.length > 0 || splitSuggestions.length > 0) ? (
+                  ) : (suggestions.length > 0) ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {suggestions.map(sug => (
                         <div key={sug.slotId} className={`p-6 rounded-2xl border flex flex-col justify-between transition-all ${sug.isPriority ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' : 'border-slate-100 bg-white hover:border-slate-300'}`}>
@@ -277,21 +328,15 @@ const App: React.FC = () => {
                   <tr><th className="px-8 py-4">Unit</th><th className="px-8 py-4">Guest</th><th className="px-8 py-4">Slot</th><th className="px-8 py-4">Dates</th><th className="px-8 py-4 text-center">Delete</th></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {bookings.length === 0 ? (
-                    <tr><td colSpan={5} className="py-20 text-center text-slate-300 italic">No bookings found in log.</td></tr>
-                  ) : (
-                    [...bookings].reverse().map(b => (
-                      <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-8 py-5 font-bold text-slate-700">{apartments.find(a=>a.id===b.apartmentId)?.name}</td>
-                        <td className="px-8 py-5 text-slate-500">{b.guestName}</td>
-                        <td className="px-8 py-5"><span className="bg-indigo-50 text-indigo-700 text-[10px] px-3 py-1 rounded-lg font-bold border border-indigo-100">{slots.find(s=>s.id===b.parkingSlotId)?.name}</span></td>
-                        <td className="px-8 py-5 text-slate-400 font-mono text-[10px]">{format(new Date(b.startDate), 'MMM dd, HH:mm')} - {format(new Date(b.endDate), 'MMM dd, HH:mm')}</td>
-                        <td className="px-8 py-5 text-center">
-                          <button onClick={() => { if(confirm('Delete?')) removeBooking(b.id)}} className="px-4 py-2 text-rose-600 border border-rose-200 rounded-lg hover:bg-rose-50 transition-colors text-[10px] font-bold uppercase"> DELETE </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  {[...bookings].reverse().map(b => (
+                    <tr key={b.id} className="hover:bg-slate-50/50">
+                      <td className="px-8 py-5 font-bold text-slate-700">{apartments.find(a=>a.id===b.apartmentId)?.name}</td>
+                      <td className="px-8 py-5 text-slate-500">{b.guestName}</td>
+                      <td className="px-8 py-5"><span className="bg-indigo-50 text-indigo-700 text-[10px] px-3 py-1 rounded-lg font-bold border border-indigo-100">{slots.find(s=>s.id===b.parkingSlotId)?.name}</span></td>
+                      <td className="px-8 py-5 text-slate-400 font-mono text-[10px]">{format(parseISO(b.startDate), 'MMM dd, HH:mm')} - {format(parseISO(b.endDate), 'MMM dd, HH:mm')}</td>
+                      <td className="px-8 py-5 text-center"><button onClick={() => { if(confirm('Delete?')) removeBooking(b.id)}} className="px-4 py-2 text-rose-600 border border-rose-200 rounded-lg text-[10px] font-bold uppercase"> DELETE </button></td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
