@@ -83,12 +83,10 @@ const App: React.FC = () => {
     await fetch(`${API_BASE}/id/${id}?sheet=bookings`, { method: 'DELETE' });
   };
 
-  // --- עזר לתצוגת תגיות בדשבורד ---
   const renderBookingBadge = (b: Booking, type: 'in' | 'out') => {
     const aptNum = apartments.find(a => a.id === b.apartmentId)?.name.replace(/\D/g, '');
     const slotName = slots.find(s => s.id === b.parkingSlotId)?.name.replace('Slot ', '');
     const colorClass = type === 'in' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100';
-    
     return (
       <div key={b.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${colorClass} text-[11px] font-bold shadow-sm`}>
         <span className="opacity-60">Apt</span> <span>{aptNum}</span>
@@ -98,7 +96,6 @@ const App: React.FC = () => {
     );
   };
 
-  // --- דף דשבורד (Dashboard) ---
   const renderDashboard = () => {
     const now = new Date();
     const occupancyPercent = (currentOccupiedCount / slots.length) * 100;
@@ -122,7 +119,6 @@ const App: React.FC = () => {
              </div>
              <p className="text-[10px] font-bold text-slate-400 mt-2">{Math.round(occupancyPercent)}% Capacity</p>
           </div>
-          
           <div className="space-y-4">
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm min-h-[100px]">
                <div className="flex items-center gap-3 mb-3">
@@ -143,7 +139,6 @@ const App: React.FC = () => {
                </div>
             </div>
           </div>
-
           <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
              <h3 className="text-[10px] font-bold text-slate-400 uppercase mb-6 tracking-widest flex items-center gap-2"><TrendingUp size={14}/> Weekly Arrivals</h3>
              <div className="flex items-end justify-between h-32 gap-3">
@@ -167,7 +162,6 @@ const App: React.FC = () => {
     );
   };
 
-  // --- דף מלאי (Inventory) ---
   const renderInventory = () => {
     const now = new Date();
     return (
@@ -175,26 +169,32 @@ const App: React.FC = () => {
         {slots.map(slot => {
           const currentBook = bookings.find(b => b.parkingSlotId === slot.id && isWithinInterval(now, { start: parseISO(b.startDate), end: parseISO(b.endDate) }));
           const upcomingToday = !currentBook && bookings.find(b => b.parkingSlotId === slot.id && isSameDay(parseISO(b.startDate), now) && isAfter(parseISO(b.startDate), now));
+          const nextFutureBook = !currentBook && !upcomingToday && bookings
+            .filter(b => b.parkingSlotId === slot.id && isAfter(parseISO(b.startDate), now))
+            .sort((a, b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime())[0];
           
           let statusColor = "border-emerald-100 bg-emerald-50/20";
           let badgeColor = "bg-emerald-500";
           let statusText = "Available";
+          let timeInfo = nextFutureBook ? `Free until: ${format(parseISO(nextFutureBook.startDate), 'MMM dd, HH:mm')}` : "Available Forever";
           
           if (currentBook) {
             statusColor = "border-rose-200 bg-rose-50/30";
             badgeColor = "bg-rose-500";
             statusText = "Occupied";
+            timeInfo = `Until: ${format(parseISO(currentBook.endDate), 'MMM dd, HH:mm')}`;
           } else if (upcomingToday) {
             statusColor = "border-amber-200 bg-amber-50/30";
             badgeColor = "bg-amber-500";
             statusText = "Arriving Today";
+            timeInfo = `Starts: ${format(parseISO(upcomingToday.startDate), 'HH:mm')}`;
           }
 
           const activeBooking = currentBook || upcomingToday;
           const aptName = activeBooking ? apartments.find(a => a.id === activeBooking.apartmentId)?.name.replace(/\D/g, '') : '';
 
           return (
-            <div key={slot.id} className={`p-6 rounded-2xl border-2 flex flex-col justify-between h-40 transition-all ${statusColor}`}>
+            <div key={slot.id} className={`p-6 rounded-2xl border-2 flex flex-col justify-between h-44 transition-all ${statusColor}`}>
               <div>
                 <div className="flex justify-between items-start">
                   <h4 className="font-black text-slate-800 text-lg">{slot.name}</h4>
@@ -204,13 +204,18 @@ const App: React.FC = () => {
                 </div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Floor {slot.floor || 'N/A'}</p>
               </div>
-              {activeBooking && (
-                <div className="flex flex-col">
-                  <p className="text-[11px] font-black text-slate-800">Apt {aptName}</p>
-                  <p className="text-[11px] font-medium text-slate-500 truncate">{activeBooking.guestName}</p>
-                  {upcomingToday && <span className="text-[9px] text-amber-600 font-bold uppercase mt-1">Arrival: {format(parseISO(upcomingToday.startDate), 'HH:mm')}</span>}
+              <div className="mt-2">
+                {activeBooking && (
+                  <div className="mb-2">
+                    <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">Apt {aptName}</p>
+                    <p className="text-[11px] font-medium text-slate-500 truncate">{activeBooking.guestName}</p>
+                  </div>
+                )}
+                <div className="flex items-center gap-1.5 text-slate-400">
+                  <Clock size={12} />
+                  <span className="text-[10px] font-bold italic">{timeInfo}</span>
                 </div>
-              )}
+              </div>
             </div>
           );
         })}
