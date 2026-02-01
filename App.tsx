@@ -11,7 +11,7 @@ import {
 const { useState, useEffect, useMemo, useCallback } = React;
 const API_BASE = "https://sheetdb.io/api/v1/l5p4a56wupgs6";
 
-// המרה של קישור גוגל דרייב לקישור וידאו ישיר
+// קישור קבוע לסרטון הלוגו המאוחסן ב-Cloudinary
 const VIDEO_URL = "https://res.cloudinary.com/dgwgzsohp/video/upload/v1769956614/grok-video-b8430f84-14c4-4242-9796-333addc4e0da_kwpwwv.mp4";
 
 const App: React.FC = () => {
@@ -19,7 +19,7 @@ const App: React.FC = () => {
   const [slots, setSlots] = useState<ParkingSlot[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [minTimeElapsed, setMinTimeElapsed] = useState(false); // טיימר ל-2.5 שניות
+  const [minTimeElapsed, setMinTimeElapsed] = useState(false); 
   const [activePage, setActivePage] = useState<'book' | 'dashboard' | 'inventory'>('book');
   const [activeTab, setActiveTab] = useState<'book' | 'history'>('book');
 
@@ -35,10 +35,10 @@ const App: React.FC = () => {
   const [splitSuggestions, setSplitSuggestions] = useState<SplitSuggestion[]>([]);
 
   useEffect(() => {
-    // מפעיל טיימר ל-2.5 שניות
+    // מפעיל טיימר ל-3.5 שניות (3500ms) להצגת הלוגו
     const timer = setTimeout(() => {
       setMinTimeElapsed(true);
-    }, 2500);
+    }, 3500);
 
     const fetchData = async () => {
       try {
@@ -62,7 +62,6 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // הצגת מסך הטעינה כל עוד לא נגמר הטיימר או שהנתונים לא חזרו
   const showSplash = loading || !minTimeElapsed;
 
   const currentOccupiedCount = useMemo(() => {
@@ -242,7 +241,6 @@ const App: React.FC = () => {
     );
   };
 
-  // --- מסך טעינה עם הוידאו שלך ---
   if (showSplash) {
     return (
       <div className="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-center">
