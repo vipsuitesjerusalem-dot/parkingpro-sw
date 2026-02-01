@@ -38,7 +38,7 @@ const App: React.FC = () => {
     // מפעיל טיימר ל-3.5 שניות (3500ms) להצגת הלוגו
     const timer = setTimeout(() => {
       setMinTimeElapsed(true);
-    }, 3500);
+    }, 2800);
 
     const fetchData = async () => {
       try {
