@@ -11,11 +11,15 @@ import {
 const { useState, useEffect, useMemo, useCallback } = React;
 const API_BASE = "https://sheetdb.io/api/v1/l5p4a56wupgs6";
 
+// המרה של קישור גוגל דרייב לקישור וידאו ישיר
+const VIDEO_URL = "https://drive.google.com/uc?export=download&id=1hLEM09u727PFgEh7JCX3rR_fGBRYyk3_"; 
+
 const App: React.FC = () => {
   const [apartments, setApartments] = useState<Apartment[]>([]);
   const [slots, setSlots] = useState<ParkingSlot[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [minTimeElapsed, setMinTimeElapsed] = useState(false); // טיימר ל-2.5 שניות
   const [activePage, setActivePage] = useState<'book' | 'dashboard' | 'inventory'>('book');
   const [activeTab, setActiveTab] = useState<'book' | 'history'>('book');
 
@@ -30,21 +34,36 @@ const App: React.FC = () => {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [splitSuggestions, setSplitSuggestions] = useState<SplitSuggestion[]>([]);
 
-  const fetchData = async () => {
-    try {
-      const [aptRes, bookRes] = await Promise.all([
-        fetch(`${API_BASE}?sheet=apartments`),
-        fetch(`${API_BASE}?sheet=bookings`)
-      ]);
-      const rawApts = await aptRes.json();
-      const rawBooks = await bookRes.json();
-      setApartments(rawApts.map((item: any) => ({ id: `apt-${item.apt}`, name: `Apartment ${item.apt}`, hasParking: item.slot !== "N/A", parkingSlotId: item.slot !== "N/A" ? `ps-${item.apt}` : undefined })));
-      setSlots(rawApts.filter((item: any) => item.slot !== "N/A").map((item: any) => ({ id: `ps-${item.apt}`, name: `Slot ${item.slot}`, floor: item.floor !== "N/A" ? item.floor : undefined, ownerApartmentId: `apt-${item.apt}` })));
-      setBookings(Array.isArray(rawBooks) ? rawBooks : []);
-    } catch (e) { console.error(e); } finally { setLoading(false); }
-  };
+  useEffect(() => {
+    // מפעיל טיימר ל-2.5 שניות
+    const timer = setTimeout(() => {
+      setMinTimeElapsed(true);
+    }, 2500);
 
-  useEffect(() => { fetchData(); }, []);
+    const fetchData = async () => {
+      try {
+        const [aptRes, bookRes] = await Promise.all([
+          fetch(`${API_BASE}?sheet=apartments`),
+          fetch(`${API_BASE}?sheet=bookings`)
+        ]);
+        const rawApts = await aptRes.json();
+        const rawBooks = await bookRes.json();
+        setApartments(rawApts.map((item: any) => ({ id: `apt-${item.apt}`, name: `Apartment ${item.apt}`, hasParking: item.slot !== "N/A", parkingSlotId: item.slot !== "N/A" ? `ps-${item.apt}` : undefined })));
+        setSlots(rawApts.filter((item: any) => item.slot !== "N/A").map((item: any) => ({ id: `ps-${item.apt}`, name: `Slot ${item.slot}`, floor: item.floor !== "N/A" ? item.floor : undefined, ownerApartmentId: `apt-${item.apt}` })));
+        setBookings(Array.isArray(rawBooks) ? rawBooks : []);
+      } catch (e) { 
+        console.error(e); 
+      } finally { 
+        setLoading(false); 
+      }
+    };
+
+    fetchData();
+    return () => clearTimeout(timer);
+  }, []);
+
+  // הצגת מסך הטעינה כל עוד לא נגמר הטיימר או שהנתונים לא חזרו
+  const showSplash = loading || !minTimeElapsed;
 
   const currentOccupiedCount = useMemo(() => {
     const now = new Date();
@@ -103,7 +122,7 @@ const App: React.FC = () => {
     const checkOutsToday = bookings.filter(b => isSameDay(parseISO(b.endDate), now));
 
     return (
-      <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="space-y-8 animate-in fade-in duration-700">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center">
              <p className="text-[10px] font-bold text-slate-400 uppercase mb-4 tracking-widest text-center">Current Occupancy</p>
@@ -223,7 +242,38 @@ const App: React.FC = () => {
     );
   };
 
-  if (loading) return <div className="flex items-center justify-center h-screen font-bold">Syncing Database...</div>;
+  // --- מסך טעינה עם הוידאו שלך ---
+  if (showSplash) {
+    return (
+      <div className="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-center">
+        <div className="w-48 h-48 md:w-64 md:h-64 overflow-hidden rounded-full flex items-center justify-center bg-slate-50 shadow-xl border-4 border-white">
+          <video 
+            src={VIDEO_URL} 
+            autoPlay 
+            loop 
+            muted 
+            playsInline 
+            className="w-full h-full object-cover"
+          />
+        </div>
+        <div className="mt-12 flex flex-col items-center gap-3">
+           <p className="text-[11px] font-black uppercase tracking-[0.4em] text-slate-400 animate-pulse">Syncing Database</p>
+           <div className="w-16 h-[2px] bg-indigo-500/10 rounded-full overflow-hidden">
+              <div className="w-full h-full bg-indigo-600 animate-loading-bar"></div>
+           </div>
+        </div>
+        <style>{`
+          @keyframes loading-bar {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+          }
+          .animate-loading-bar {
+            animation: loading-bar 2s infinite ease-in-out;
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   return (
     <Layout activePage={activePage} onNavigate={(p) => setActivePage(p)}>
