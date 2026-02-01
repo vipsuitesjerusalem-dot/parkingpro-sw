@@ -12,7 +12,7 @@ const { useState, useEffect, useMemo, useCallback } = React;
 const API_BASE = "https://sheetdb.io/api/v1/l5p4a56wupgs6";
 
 // המרה של קישור גוגל דרייב לקישור וידאו ישיר
-const VIDEO_URL = "https://drive.google.com/uc?export=download&id=1hLEM09u727PFgEh7JCX3rR_fGBRYyk3_"; 
+const VIDEO_URL = "https://filebin.net/jiukkdnirxcixw6y/grok-video-b8430f84-14c4-4242-9796-333addc4e0da.mp4";
 
 const App: React.FC = () => {
   const [apartments, setApartments] = useState<Apartment[]>([]);
