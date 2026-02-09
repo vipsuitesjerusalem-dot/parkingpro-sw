@@ -33,7 +33,7 @@ const App: React.FC = () => {
   const [splitSuggestions, setSplitSuggestions] = useState<SplitSuggestion[]>([]);
 
   useEffect(() => {
-    // מפעיל טיימר ל-2.8 שניות להצגת הלוגו
+    // טיימר ל-2.8 שניות כפי שביקשת
     const timer = setTimeout(() => {
       setMinTimeElapsed(true);
     }, 2800);
@@ -211,7 +211,7 @@ const App: React.FC = () => {
           const ownerAptName = apartments.find(a => a.id === slot.ownerApartmentId)?.name.replace(/\D/g, '') || 'N/A';
 
           return (
-            <div key={slot.id} className={`p-6 rounded-2xl border-2 flex flex-col justify-between h-[210px] transition-all ${statusColor}`}>
+            <div key={slot.id} className={`p-6 rounded-2xl border-2 flex flex-col justify-between h-[220px] transition-all ${statusColor}`}>
               <div>
                 <div className="flex justify-between items-start">
                   <h4 className="font-black text-slate-800 text-lg">{slot.name}</h4>
@@ -228,7 +228,10 @@ const App: React.FC = () => {
               <div className="mt-2">
                 {activeBooking && (
                   <div className="mb-2 p-2 bg-white/60 rounded-xl border border-white/50 shadow-sm">
-                    <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-0.5">Currently:</p>
+                    {/* התווית החדשה בעיצוב שביקשת */}
+                    <span className="inline-block bg-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded mb-1.5 uppercase tracking-wide">
+                      Currently
+                    </span>
                     <p className="text-sm font-black text-slate-900 uppercase tracking-tight">Apt {aptName}</p>
                     <p className="text-[11px] font-bold text-slate-500 truncate">{activeBooking.guestName}</p>
                   </div>
