@@ -11,7 +11,6 @@ import {
 const { useState, useEffect, useMemo, useCallback } = React;
 const API_BASE = "https://sheetdb.io/api/v1/l5p4a56wupgs6";
 
-// קישור קבוע לסרטון הלוגו המאוחסן ב-Cloudinary
 const VIDEO_URL = "https://res.cloudinary.com/dgwgzsohp/video/upload/v1769956614/grok-video-b8430f84-14c4-4242-9796-333addc4e0da_kwpwwv.mp4";
 
 const App: React.FC = () => {
@@ -23,7 +22,6 @@ const App: React.FC = () => {
   const [activePage, setActivePage] = useState<'book' | 'dashboard' | 'inventory'>('book');
   const [activeTab, setActiveTab] = useState<'book' | 'history'>('book');
 
-  // Form State
   const [selectedApt, setSelectedApt] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [startDate, setStartDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
@@ -35,7 +33,7 @@ const App: React.FC = () => {
   const [splitSuggestions, setSplitSuggestions] = useState<SplitSuggestion[]>([]);
 
   useEffect(() => {
-    // מפעיל טיימר ל-3.5 שניות (3500ms) להצגת הלוגו
+    // מפעיל טיימר ל-2.8 שניות (2800ms) להצגת הלוגו כפי שהגדרת
     const timer = setTimeout(() => {
       setMinTimeElapsed(true);
     }, 2800);
@@ -210,6 +208,9 @@ const App: React.FC = () => {
 
           const activeBooking = currentBook || upcomingToday;
           const aptName = activeBooking ? apartments.find(a => a.id === activeBooking.apartmentId)?.name.replace(/\D/g, '') : '';
+          
+          // מציאת שם הדירה לה שייכת החניה במקור
+          const ownerAptName = apartments.find(a => a.id === slot.ownerApartmentId)?.name.replace(/\D/g, '') || 'N/A';
 
           return (
             <div key={slot.id} className={`p-6 rounded-2xl border-2 flex flex-col justify-between h-44 transition-all ${statusColor}`}>
@@ -221,6 +222,8 @@ const App: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Floor {slot.floor || 'N/A'}</p>
+                {/* התוספת החדשה: למי החניה שייכת במקור */}
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Owner: Apt {ownerAptName}</p>
               </div>
               <div className="mt-2">
                 {activeBooking && (
@@ -355,15 +358,20 @@ const App: React.FC = () => {
                     </div>
                   ) : (suggestions.length > 0) ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {suggestions.map(sug => (
-                        <div key={sug.slotId} className={`p-6 rounded-2xl border flex flex-col justify-between transition-all ${sug.isPriority ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' : 'border-slate-100 bg-white hover:border-slate-300'}`}>
-                          <div>
-                            <h4 className="font-bold text-slate-800 flex items-center gap-2">{sug.slotName} {sug.isPriority && <span className="bg-indigo-600 text-white text-[8px] px-1.5 py-0.5 rounded uppercase font-bold">Owner</span>}</h4>
-                            <p className="text-[10px] text-slate-400 uppercase font-bold">Floor {sug.floor || 'N/A'}</p>
+                      {suggestions.map(sug => {
+                         const ownerAptName = apartments.find(a => a.id === slots.find(s => s.id === sug.slotId)?.ownerApartmentId)?.name.replace(/\D/g, '') || 'N/A';
+                         return (
+                          <div key={sug.slotId} className={`p-6 rounded-2xl border flex flex-col justify-between transition-all ${sug.isPriority ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' : 'border-slate-100 bg-white hover:border-slate-300'}`}>
+                            <div>
+                              <h4 className="font-bold text-slate-800 flex items-center gap-2">{sug.slotName} {sug.isPriority && <span className="bg-indigo-600 text-white text-[8px] px-1.5 py-0.5 rounded uppercase font-bold">Owner</span>}</h4>
+                              <p className="text-[10px] text-slate-400 uppercase font-bold">Floor {sug.floor || 'N/A'}</p>
+                              {/* התוספת החדשה: למי שייך במקור בתוך הצעות ההזמנה */}
+                              <p className="text-[10px] text-slate-400 uppercase font-bold">Owner: Apt {ownerAptName}</p>
+                            </div>
+                            <button onClick={() => handleAddBooking(sug.slotId)} className="mt-6 w-full py-3 bg-slate-800 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-black transition-colors">Book Now</button>
                           </div>
-                          <button onClick={() => handleAddBooking(sug.slotId)} className="mt-6 w-full py-3 bg-slate-800 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-black transition-colors">Book Now</button>
-                        </div>
-                      ))}
+                         );
+                      })}
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-20 text-rose-500 font-bold">
