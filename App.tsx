@@ -33,7 +33,7 @@ const App: React.FC = () => {
   const [splitSuggestions, setSplitSuggestions] = useState<SplitSuggestion[]>([]);
 
   useEffect(() => {
-    // מפעיל טיימר ל-2.8 שניות (2800ms) להצגת הלוגו כפי שהגדרת
+    // מפעיל טיימר ל-2.8 שניות להצגת הלוגו
     const timer = setTimeout(() => {
       setMinTimeElapsed(true);
     }, 2800);
@@ -208,12 +208,10 @@ const App: React.FC = () => {
 
           const activeBooking = currentBook || upcomingToday;
           const aptName = activeBooking ? apartments.find(a => a.id === activeBooking.apartmentId)?.name.replace(/\D/g, '') : '';
-          
-          // מציאת שם הדירה לה שייכת החניה במקור
           const ownerAptName = apartments.find(a => a.id === slot.ownerApartmentId)?.name.replace(/\D/g, '') || 'N/A';
 
           return (
-            <div key={slot.id} className={`p-6 rounded-2xl border-2 flex flex-col justify-between h-44 transition-all ${statusColor}`}>
+            <div key={slot.id} className={`p-6 rounded-2xl border-2 flex flex-col justify-between h-[210px] transition-all ${statusColor}`}>
               <div>
                 <div className="flex justify-between items-start">
                   <h4 className="font-black text-slate-800 text-lg">{slot.name}</h4>
@@ -221,18 +219,21 @@ const App: React.FC = () => {
                     {statusText}
                   </span>
                 </div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Floor {slot.floor || 'N/A'}</p>
-                {/* התוספת החדשה: למי החניה שייכת במקור */}
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Owner: Apt {ownerAptName}</p>
+                <div className="flex flex-col gap-0.5 mt-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Floor {slot.floor || 'N/A'}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Owner: Apt {ownerAptName}</p>
+                </div>
               </div>
+              
               <div className="mt-2">
                 {activeBooking && (
-                  <div className="mb-2">
-                    <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">Apt {aptName}</p>
-                    <p className="text-[11px] font-medium text-slate-500 truncate">{activeBooking.guestName}</p>
+                  <div className="mb-2 p-2 bg-white/60 rounded-xl border border-white/50 shadow-sm">
+                    <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-0.5">Currently:</p>
+                    <p className="text-sm font-black text-slate-900 uppercase tracking-tight">Apt {aptName}</p>
+                    <p className="text-[11px] font-bold text-slate-500 truncate">{activeBooking.guestName}</p>
                   </div>
                 )}
-                <div className="flex items-center gap-1.5 text-slate-400">
+                <div className="flex items-center gap-1.5 text-slate-400 mt-1">
                   <Clock size={12} />
                   <span className="text-[10px] font-bold italic">{timeInfo}</span>
                 </div>
@@ -248,14 +249,7 @@ const App: React.FC = () => {
     return (
       <div className="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-center">
         <div className="w-48 h-48 md:w-64 md:h-64 overflow-hidden rounded-full flex items-center justify-center bg-slate-50 shadow-xl border-4 border-white">
-          <video 
-            src={VIDEO_URL} 
-            autoPlay 
-            loop 
-            muted 
-            playsInline 
-            className="w-full h-full object-cover"
-          />
+          <video src={VIDEO_URL} autoPlay loop muted playsInline className="w-full h-full object-cover" />
         </div>
         <div className="mt-12 flex flex-col items-center gap-3">
            <p className="text-[11px] font-black uppercase tracking-[0.4em] text-slate-400 animate-pulse">Syncing Database</p>
@@ -264,13 +258,8 @@ const App: React.FC = () => {
            </div>
         </div>
         <style>{`
-          @keyframes loading-bar {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-          }
-          .animate-loading-bar {
-            animation: loading-bar 2s infinite ease-in-out;
-          }
+          @keyframes loading-bar { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+          .animate-loading-bar { animation: loading-bar 2s infinite ease-in-out; }
         `}</style>
       </div>
     );
@@ -365,7 +354,6 @@ const App: React.FC = () => {
                             <div>
                               <h4 className="font-bold text-slate-800 flex items-center gap-2">{sug.slotName} {sug.isPriority && <span className="bg-indigo-600 text-white text-[8px] px-1.5 py-0.5 rounded uppercase font-bold">Owner</span>}</h4>
                               <p className="text-[10px] text-slate-400 uppercase font-bold">Floor {sug.floor || 'N/A'}</p>
-                              {/* התוספת החדשה: למי שייך במקור בתוך הצעות ההזמנה */}
                               <p className="text-[10px] text-slate-400 uppercase font-bold">Owner: Apt {ownerAptName}</p>
                             </div>
                             <button onClick={() => handleAddBooking(sug.slotId)} className="mt-6 w-full py-3 bg-slate-800 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-black transition-colors">Book Now</button>
