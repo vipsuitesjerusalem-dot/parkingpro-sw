@@ -33,7 +33,6 @@ const App: React.FC = () => {
   const [splitSuggestions, setSplitSuggestions] = useState<SplitSuggestion[]>([]);
 
   useEffect(() => {
-    // טיימר ל-2.8 שניות כפי שביקשת
     const timer = setTimeout(() => {
       setMinTimeElapsed(true);
     }, 2800);
@@ -91,7 +90,18 @@ const App: React.FC = () => {
     const newBooking = { id: `book-${Date.now()}`, apartmentId: selectedApt, parkingSlotId: slotId, startDate: d ? d.start : fullStartISO, endDate: d ? d.end : fullEndISO, guestName: guestName || 'Guest' };
     setBookings(prev => [...prev, newBooking]);
     await fetch(`${API_BASE}?sheet=bookings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: [newBooking] }) });
-    if (!d || d.end === fullEndISO) { setSelectedApt(''); setSearchTerm(''); setEndDate(''); setActiveTab('history'); }
+    
+    // איפוס הטופס לברירת המחדל לאחר הזמנה מוצלחת
+    if (!d || d.end === fullEndISO) { 
+      setSelectedApt(''); 
+      setSearchTerm(''); 
+      setEndDate(''); 
+      setGuestName('');
+      setStartDate(format(new Date(), 'yyyy-MM-dd'));
+      setCheckInTime('16:00');
+      setCheckOutTime('11:00');
+      setActiveTab('history'); 
+    }
   }, [selectedApt, fullStartISO, fullEndISO, guestName]);
 
   const removeBooking = async (id: string) => {
@@ -228,7 +238,6 @@ const App: React.FC = () => {
               <div className="mt-2">
                 {activeBooking && (
                   <div className="mb-2 p-2 bg-white/60 rounded-xl border border-white/50 shadow-sm">
-                    {/* התווית החדשה בעיצוב שביקשת */}
                     <span className="inline-block bg-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded mb-1.5 uppercase tracking-wide">
                       Currently
                     </span>
