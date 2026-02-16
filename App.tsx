@@ -9,7 +9,9 @@ import {
 } from 'lucide-react';
 
 const { useState, useEffect, useMemo, useCallback } = React;
-const API_BASE = "https://sheetdb.io/api/v1/l5p4a56wupgs6";
+
+// כתובת ה-API המעודכנת של גוגל שיטס (פרויקט פרעה)
+const API_BASE = "https://script.google.com/macros/s/AKfycbzlwvjmDWOW4bCgZZfdf87mMmAiyWUQwvutzOGMCsPK8v117qU0p52bU5jHGKBg7IDT/exec";
 
 const VIDEO_URL = "https://res.cloudinary.com/dgwgzsohp/video/upload/v1769956614/grok-video-b8430f84-14c4-4242-9796-333addc4e0da_kwpwwv.mp4";
 
@@ -45,11 +47,24 @@ const App: React.FC = () => {
         ]);
         const rawApts = await aptRes.json();
         const rawBooks = await bookRes.json();
-        setApartments(rawApts.map((item: any) => ({ id: `apt-${item.apt}`, name: `Apartment ${item.apt}`, hasParking: item.slot !== "N/A", parkingSlotId: item.slot !== "N/A" ? `ps-${item.apt}` : undefined })));
-        setSlots(rawApts.filter((item: any) => item.slot !== "N/A").map((item: any) => ({ id: `ps-${item.apt}`, name: `Slot ${item.slot}`, floor: item.floor !== "N/A" ? item.floor : undefined, ownerApartmentId: `apt-${item.apt}` })));
+        
+        setApartments(rawApts.map((item: any) => ({ 
+          id: `apt-${item.apt}`, 
+          name: `Apartment ${item.apt}`, 
+          hasParking: item.slot !== "N/A", 
+          parkingSlotId: item.slot !== "N/A" ? `ps-${item.apt}` : undefined 
+        })));
+        
+        setSlots(rawApts.filter((item: any) => item.slot !== "N/A").map((item: any) => ({ 
+          id: `ps-${item.apt}`, 
+          name: `Slot ${item.slot}`, 
+          floor: item.floor !== "N/A" ? item.floor : undefined, 
+          ownerApartmentId: `apt-${item.apt}` 
+        })));
+        
         setBookings(Array.isArray(rawBooks) ? rawBooks : []);
       } catch (e) { 
-        console.error(e); 
+        console.error("Fetch error:", e); 
       } finally { 
         setLoading(false); 
       }
@@ -87,11 +102,24 @@ const App: React.FC = () => {
   }, [selectedApt, fullStartISO, fullEndISO, bookings, apartments, slots, endDate]);
 
   const handleAddBooking = useCallback(async (slotId: string, d?: {start: string, end: string}) => {
-    const newBooking = { id: `book-${Date.now()}`, apartmentId: selectedApt, parkingSlotId: slotId, startDate: d ? d.start : fullStartISO, endDate: d ? d.end : fullEndISO, guestName: guestName || 'Guest' };
-    setBookings(prev => [...prev, newBooking]);
-    await fetch(`${API_BASE}?sheet=bookings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: [newBooking] }) });
+    const newBooking = { 
+      id: String(Date.now()), 
+      apartmentId: selectedApt, 
+      parkingSlotId: slotId, 
+      startDate: d ? d.start : fullStartISO, 
+      endDate: d ? d.end : fullEndISO, 
+      guestName: guestName || 'Guest' 
+    };
     
-    // איפוס הטופס לברירת המחדל לאחר הזמנה מוצלחת
+    setBookings(prev => [...prev, newBooking]);
+    
+    // שליחה לגוגל שיטס (action: add)
+    await fetch(API_BASE, { 
+      method: 'POST', 
+      mode: 'no-cors', 
+      body: JSON.stringify({ action: 'add', sheet: 'bookings', data: newBooking }) 
+    });
+    
     if (!d || d.end === fullEndISO) { 
       setSelectedApt(''); 
       setSearchTerm(''); 
@@ -106,7 +134,12 @@ const App: React.FC = () => {
 
   const removeBooking = async (id: string) => {
     setBookings(prev => prev.filter(b => b.id !== id));
-    await fetch(`${API_BASE}/id/${id}?sheet=bookings`, { method: 'DELETE' });
+    // מחיקה מגוגל שיטס (action: delete)
+    await fetch(API_BASE, { 
+      method: 'POST', 
+      mode: 'no-cors', 
+      body: JSON.stringify({ action: 'delete', sheet: 'bookings', id: id }) 
+    });
   };
 
   const renderBookingBadge = (b: Booking, type: 'in' | 'out') => {
@@ -132,37 +165,37 @@ const App: React.FC = () => {
       <div className="space-y-8 animate-in fade-in duration-700">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center">
-             <p className="text-[10px] font-bold text-slate-400 uppercase mb-4 tracking-widest text-center">Current Occupancy</p>
-             <div className="relative w-48 h-24 overflow-hidden mb-2">
-                <div className="absolute top-0 left-0 w-48 h-48 rounded-full border-[16px] border-slate-100"></div>
-                <div className="absolute top-0 left-0 w-48 h-48 rounded-full border-[16px] border-indigo-500 transition-all duration-1000" 
-                     style={{ clipPath: `inset(0 0 50% 0)`, transform: `rotate(${(occupancyPercent * 1.8) - 180}deg)` }}></div>
-                <div className="absolute bottom-0 w-full text-center">
-                   <span className="text-2xl font-black text-rose-500">{currentOccupiedCount}</span>
-                   <span className="text-xl font-bold text-slate-300 mx-1">/</span>
-                   <span className="text-2xl font-black text-emerald-500">{slots.length}</span>
-                </div>
-             </div>
-             <p className="text-[10px] font-bold text-slate-400 mt-2">{Math.round(occupancyPercent)}% Capacity</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-4 tracking-widest text-center">Current Occupancy</p>
+              <div className="relative w-48 h-24 overflow-hidden mb-2">
+                 <div className="absolute top-0 left-0 w-48 h-48 rounded-full border-[16px] border-slate-100"></div>
+                 <div className="absolute top-0 left-0 w-48 h-48 rounded-full border-[16px] border-indigo-500 transition-all duration-1000" 
+                      style={{ clipPath: `inset(0 0 50% 0)`, transform: `rotate(${(occupancyPercent * 1.8) - 180}deg)` }}></div>
+                 <div className="absolute bottom-0 w-full text-center">
+                    <span className="text-2xl font-black text-rose-500">{currentOccupiedCount}</span>
+                    <span className="text-xl font-bold text-slate-300 mx-1">/</span>
+                    <span className="text-2xl font-black text-emerald-500">{slots.length}</span>
+                 </div>
+              </div>
+              <p className="text-[10px] font-bold text-slate-400 mt-2">{Math.round(occupancyPercent)}% Capacity</p>
           </div>
           <div className="space-y-4">
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm min-h-[100px]">
-               <div className="flex items-center gap-3 mb-3">
-                  <div className="bg-emerald-50 text-emerald-600 p-2 rounded-xl"><ArrowDownCircle size={20}/></div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Arrivals Today</p>
-               </div>
-               <div className="flex flex-wrap gap-2">
-                  {checkInsToday.length > 0 ? checkInsToday.map(b => renderBookingBadge(b, 'in')) : <p className="text-sm text-slate-300 italic">No arrivals</p>}
-               </div>
+                <div className="flex items-center gap-3 mb-3">
+                   <div className="bg-emerald-50 text-emerald-600 p-2 rounded-xl"><ArrowDownCircle size={20}/></div>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Arrivals Today</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                   {checkInsToday.length > 0 ? checkInsToday.map(b => renderBookingBadge(b, 'in')) : <p className="text-sm text-slate-300 italic">No arrivals</p>}
+                </div>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm min-h-[100px]">
-               <div className="flex items-center gap-3 mb-3">
-                  <div className="bg-rose-50 text-rose-600 p-2 rounded-xl"><ArrowUpCircle size={20}/></div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Departures Today</p>
-               </div>
-               <div className="flex flex-wrap gap-2">
-                  {checkOutsToday.length > 0 ? checkOutsToday.map(b => renderBookingBadge(b, 'out')) : <p className="text-sm text-slate-300 italic">No departures</p>}
-               </div>
+                <div className="flex items-center gap-3 mb-3">
+                   <div className="bg-rose-50 text-rose-600 p-2 rounded-xl"><ArrowUpCircle size={20}/></div>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Departures Today</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                   {checkOutsToday.length > 0 ? checkOutsToday.map(b => renderBookingBadge(b, 'out')) : <p className="text-sm text-slate-300 italic">No departures</p>}
+                </div>
             </div>
           </div>
           <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
