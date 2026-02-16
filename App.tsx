@@ -10,8 +10,8 @@ import {
 
 const { useState, useEffect, useMemo, useCallback } = React;
 
-// כתובת ה-API המעודכנת של גוגל שיטס (פרויקט פרעה)
-const API_BASE = "https://script.google.com/macros/s/AKfycbzlwvjmDWOW4bCgZZfdf87mMmAiyWUQwvutzOGMCsPK8v117qU0p52bU5jHGKBg7IDT/exec";
+// הקישור החדש שלך
+const API_BASE = "https://script.google.com/macros/s/AKfycbwTd7r0lZGY9T9D6Vu6IlGZ_KBys-nFja0_OdbeH-iw7R6H1M8vn9bY_xIUi4q49DJV/exec";
 
 const VIDEO_URL = "https://res.cloudinary.com/dgwgzsohp/video/upload/v1769956614/grok-video-b8430f84-14c4-4242-9796-333addc4e0da_kwpwwv.mp4";
 
@@ -35,32 +35,36 @@ const App: React.FC = () => {
   const [splitSuggestions, setSplitSuggestions] = useState<SplitSuggestion[]>([]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setMinTimeElapsed(true);
-    }, 2800);
+    const timer = setTimeout(() => setMinTimeElapsed(true), 2800);
 
     const fetchData = async () => {
       try {
+        // משיכת נתונים משני הגיליונות
         const [aptRes, bookRes] = await Promise.all([
           fetch(`${API_BASE}?sheet=apartments`),
           fetch(`${API_BASE}?sheet=bookings`)
         ]);
+        
         const rawApts = await aptRes.json();
         const rawBooks = await bookRes.json();
         
-        setApartments(rawApts.map((item: any) => ({ 
-          id: `apt-${item.apt}`, 
-          name: `Apartment ${item.apt}`, 
-          hasParking: item.slot !== "N/A", 
-          parkingSlotId: item.slot !== "N/A" ? `ps-${item.apt}` : undefined 
-        })));
-        
-        setSlots(rawApts.filter((item: any) => item.slot !== "N/A").map((item: any) => ({ 
-          id: `ps-${item.apt}`, 
-          name: `Slot ${item.slot}`, 
-          floor: item.floor !== "N/A" ? item.floor : undefined, 
-          ownerApartmentId: `apt-${item.apt}` 
-        })));
+        if (Array.isArray(rawApts)) {
+          // מיפוי הדירות לפי המבנה בגיליון: apt, floor, slot
+          setApartments(rawApts.map((item: any) => ({ 
+            id: `apt-${item.apt}`, 
+            name: `Apartment ${item.apt}`, 
+            hasParking: String(item.slot) !== "N/A", 
+            parkingSlotId: String(item.slot) !== "N/A" ? `ps-${item.apt}` : undefined 
+          })));
+          
+          // מיפוי החניות
+          setSlots(rawApts.filter((item: any) => String(item.slot) !== "N/A").map((item: any) => ({ 
+            id: `ps-${item.apt}`, 
+            name: `Slot ${item.slot}`, 
+            floor: item.floor !== "N/A" ? item.floor : undefined, 
+            ownerApartmentId: `apt-${item.apt}` 
+          })));
+        }
         
         setBookings(Array.isArray(rawBooks) ? rawBooks : []);
       } catch (e) { 
@@ -113,10 +117,10 @@ const App: React.FC = () => {
     
     setBookings(prev => [...prev, newBooking]);
     
-    // שליחה לגוגל שיטס (action: add)
+    // שליחה לגוגל סקריפט
     await fetch(API_BASE, { 
       method: 'POST', 
-      mode: 'no-cors', 
+      mode: 'no-cors', // חשוב לעבודה מול Google Script POST
       body: JSON.stringify({ action: 'add', sheet: 'bookings', data: newBooking }) 
     });
     
@@ -134,13 +138,15 @@ const App: React.FC = () => {
 
   const removeBooking = async (id: string) => {
     setBookings(prev => prev.filter(b => b.id !== id));
-    // מחיקה מגוגל שיטס (action: delete)
     await fetch(API_BASE, { 
       method: 'POST', 
-      mode: 'no-cors', 
+      mode: 'no-cors',
       body: JSON.stringify({ action: 'delete', sheet: 'bookings', id: id }) 
     });
   };
+
+  // ... שאר פונקציות ה-Render (renderBookingBadge, renderDashboard, renderInventory וכו') נשארות כפי שהיו בקוד שלך
+  // (השמטתי אותן כאן כדי לחסוך מקום, אבל הן צריכות להישאר בדיוק אותו דבר)
 
   const renderBookingBadge = (b: Booking, type: 'in' | 'out') => {
     const aptNum = apartments.find(a => a.id === b.apartmentId)?.name.replace(/\D/g, '');
@@ -290,6 +296,7 @@ const App: React.FC = () => {
     );
   };
 
+  // ... כאן מופיע ה-JSX הסופי (Splash ו-Layout)
   if (showSplash) {
     return (
       <div className="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-center">
