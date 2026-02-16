@@ -5,14 +5,12 @@ import { getParkingSuggestions, getSplitParkingSuggestions } from './utils/parki
 import { format, isWithinInterval, addDays, isSameDay, parseISO, isAfter } from 'date-fns';
 import { 
   Calendar, Car, Plus, AlertCircle, Sparkles, Search, ArrowRight, Clock, 
-  TrendingUp, ArrowDownCircle, ArrowUpCircle
+  TrendingUp, ArrowDownCircle, ArrowUpCircle, GitBranch
 } from 'lucide-react';
 
 const { useState, useEffect, useMemo, useCallback } = React;
 
-// הקישור החדש שלך
-const API_BASE = "https://script.google.com/macros/s/AKfycbwTd7r0lZGY9T9D6Vu6IlGZ_KBys-nFja0_OdbeH-iw7R6H1M8vn9bY_xIUi4q49DJV/exec";
-
+const API_BASE = "https://script.google.com/macros/s/AKfycbzlwvjmDWOW4bCgZZfdf87mMmAiyWUQwvutzOGMCsPK8v117qU0p52bU5jHGKBg7IDT/exec";
 const VIDEO_URL = "https://res.cloudinary.com/dgwgzsohp/video/upload/v1769956614/grok-video-b8430f84-14c4-4242-9796-333addc4e0da_kwpwwv.mp4";
 
 const App: React.FC = () => {
@@ -35,36 +33,32 @@ const App: React.FC = () => {
   const [splitSuggestions, setSplitSuggestions] = useState<SplitSuggestion[]>([]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setMinTimeElapsed(true), 2800);
+    const timer = setTimeout(() => {
+      setMinTimeElapsed(true);
+    }, 2800);
 
     const fetchData = async () => {
       try {
-        // משיכת נתונים משני הגיליונות
         const [aptRes, bookRes] = await Promise.all([
           fetch(`${API_BASE}?sheet=apartments`),
           fetch(`${API_BASE}?sheet=bookings`)
         ]);
-        
         const rawApts = await aptRes.json();
         const rawBooks = await bookRes.json();
         
-        if (Array.isArray(rawApts)) {
-          // מיפוי הדירות לפי המבנה בגיליון: apt, floor, slot
-          setApartments(rawApts.map((item: any) => ({ 
-            id: `apt-${item.apt}`, 
-            name: `Apartment ${item.apt}`, 
-            hasParking: String(item.slot) !== "N/A", 
-            parkingSlotId: String(item.slot) !== "N/A" ? `ps-${item.apt}` : undefined 
-          })));
-          
-          // מיפוי החניות
-          setSlots(rawApts.filter((item: any) => String(item.slot) !== "N/A").map((item: any) => ({ 
-            id: `ps-${item.apt}`, 
-            name: `Slot ${item.slot}`, 
-            floor: item.floor !== "N/A" ? item.floor : undefined, 
-            ownerApartmentId: `apt-${item.apt}` 
-          })));
-        }
+        setApartments(rawApts.map((item: any) => ({ 
+          id: `apt-${item.apt}`, 
+          name: `Apartment ${item.apt}`, 
+          hasParking: item.slot !== "N/A", 
+          parkingSlotId: item.slot !== "N/A" ? `ps-${item.apt}` : undefined 
+        })));
+        
+        setSlots(rawApts.filter((item: any) => item.slot !== "N/A").map((item: any) => ({ 
+          id: `ps-${item.apt}`, 
+          name: `Slot ${item.slot}`, 
+          floor: item.floor !== "N/A" ? item.floor : undefined, 
+          ownerApartmentId: `apt-${item.apt}` 
+        })));
         
         setBookings(Array.isArray(rawBooks) ? rawBooks : []);
       } catch (e) { 
@@ -107,7 +101,7 @@ const App: React.FC = () => {
 
   const handleAddBooking = useCallback(async (slotId: string, d?: {start: string, end: string}) => {
     const newBooking = { 
-      id: String(Date.now()), 
+      id: String(Date.now() + Math.random()), 
       apartmentId: selectedApt, 
       parkingSlotId: slotId, 
       startDate: d ? d.start : fullStartISO, 
@@ -117,36 +111,43 @@ const App: React.FC = () => {
     
     setBookings(prev => [...prev, newBooking]);
     
-    // שליחה לגוגל סקריפט
     await fetch(API_BASE, { 
       method: 'POST', 
-      mode: 'no-cors', // חשוב לעבודה מול Google Script POST
+      mode: 'no-cors', 
       body: JSON.stringify({ action: 'add', sheet: 'bookings', data: newBooking }) 
     });
     
     if (!d || d.end === fullEndISO) { 
-      setSelectedApt(''); 
-      setSearchTerm(''); 
-      setEndDate(''); 
-      setGuestName('');
-      setStartDate(format(new Date(), 'yyyy-MM-dd'));
-      setCheckInTime('16:00');
-      setCheckOutTime('11:00');
-      setActiveTab('history'); 
+      resetForm();
     }
   }, [selectedApt, fullStartISO, fullEndISO, guestName]);
+
+  const handleSplitBooking = async (split: SplitSuggestion) => {
+    // ביצוע שתי הזמנות במקביל עבור הפיצול
+    await handleAddBooking(split.firstPart.slotId, { start: split.firstPart.start, end: split.firstPart.end });
+    await handleAddBooking(split.secondPart.slotId, { start: split.secondPart.start, end: split.secondPart.end });
+    resetForm();
+  };
+
+  const resetForm = () => {
+    setSelectedApt(''); 
+    setSearchTerm(''); 
+    setEndDate(''); 
+    setGuestName('');
+    setStartDate(format(new Date(), 'yyyy-MM-dd'));
+    setCheckInTime('16:00');
+    setCheckOutTime('11:00');
+    setActiveTab('history');
+  };
 
   const removeBooking = async (id: string) => {
     setBookings(prev => prev.filter(b => b.id !== id));
     await fetch(API_BASE, { 
       method: 'POST', 
-      mode: 'no-cors',
+      mode: 'no-cors', 
       body: JSON.stringify({ action: 'delete', sheet: 'bookings', id: id }) 
     });
   };
-
-  // ... שאר פונקציות ה-Render (renderBookingBadge, renderDashboard, renderInventory וכו') נשארות כפי שהיו בקוד שלך
-  // (השמטתי אותן כאן כדי לחסוך מקום, אבל הן צריכות להישאר בדיוק אותו דבר)
 
   const renderBookingBadge = (b: Booking, type: 'in' | 'out') => {
     const aptNum = apartments.find(a => a.id === b.apartmentId)?.name.replace(/\D/g, '');
@@ -296,7 +297,6 @@ const App: React.FC = () => {
     );
   };
 
-  // ... כאן מופיע ה-JSX הסופי (Splash ו-Layout)
   if (showSplash) {
     return (
       <div className="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-center">
@@ -412,6 +412,37 @@ const App: React.FC = () => {
                           </div>
                          );
                       })}
+                    </div>
+                  ) : (splitSuggestions.length > 0) ? (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-top-4">
+                      <div className="flex items-center gap-3 p-4 bg-indigo-50 text-indigo-700 rounded-2xl border border-indigo-100 mb-2">
+                        <GitBranch size={20} />
+                        <p className="text-sm font-bold">No single slot available. Try a split reservation:</p>
+                      </div>
+                      {splitSuggestions.map((split, idx) => (
+                        <div key={idx} className="bg-white border-2 border-indigo-100 p-6 rounded-3xl shadow-sm">
+                          <div className="flex items-center justify-between mb-6">
+                            <div className="flex flex-col items-center">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">Part 1</span>
+                              <div className="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-black tracking-tight">{split.firstPart.slotName}</div>
+                            </div>
+                            <ArrowRight className="text-indigo-300" />
+                            <div className="flex flex-col items-center">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">Part 2</span>
+                              <div className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-black tracking-tight">{split.secondPart.slotName}</div>
+                            </div>
+                          </div>
+                          <div className="text-xs text-slate-500 mb-6 bg-slate-50 p-3 rounded-xl">
+                            Switch at: <span className="font-bold text-slate-800">{format(parseISO(split.firstPart.end), 'MMM dd, HH:mm')}</span>
+                          </div>
+                          <button 
+                            onClick={() => handleSplitBooking(split)}
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-lg shadow-indigo-100"
+                          >
+                            Book Split Now
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-20 text-rose-500 font-bold">
